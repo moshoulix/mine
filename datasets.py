@@ -7,7 +7,7 @@ import math
 from sklearn.preprocessing import MinMaxScaler
 from torch.distributions import MultivariateNormal
 
-""
+
 def twospirals(n_points, noise=.5):
     """
      Returns the two spirals dataset.
