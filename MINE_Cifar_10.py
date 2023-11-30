@@ -37,7 +37,7 @@ class Trainer:
     def __init__(self, input_size, hidden_size, args):
         self.model = Mine(input_size, hidden_size).cuda()
         self.args = args
-
+        self.dataloader =
 
 
 def mutual_information(joint, marginal, mine_net):
