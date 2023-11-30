@@ -4,6 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from dataset import mnist_dataloader
+import os
+from datetime import datetime
+import logging
 
 
 class Mine(nn.Module):
@@ -26,18 +30,71 @@ class Mine(nn.Module):
                 nn.init.normal_(layer.weight, std=0.02)
                 nn.init.constant_(layer.bias, 0)
 
-    def load(self):
-        pass
-
-    def save(self):
-        pass
-
 
 class Trainer:
     def __init__(self, input_size, hidden_size, args):
         self.model = Mine(input_size, hidden_size).cuda()
         self.args = args
-        self.dataloader =
+        self.dataloader = mnist_dataloader('train', 64)
+        self.now = datetime.now()
+
+    def train(self):
+        if not os.path.exists('./log'):
+            os.makedirs('./log')
+
+        logging.basicConfig(
+            filename='./log/{}_{}_training.log'.format(self.args.save_name, self.now.strftime('%Y%m%d_%H_%M')),
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        optimizer = optim.Adam(self.model.parameters(), lr=self.args.Dz_lr, betas=(0.5, 0.999))
+        loss_ = None
+        print('Trainning begins.')
+
+        result = list()
+        ma_et = 1.
+        for ep in range(self.args.epoch):
+            joint = sample_batch(data, batch_size=self.args.batch_size)
+            marginal = sample_batch(data, batch_size=self.args.batch_size, sample_mode='marginal')
+
+            joint = torch.autograd.Variable(torch.FloatTensor(joint)).cuda()
+            marginal = torch.autograd.Variable(torch.FloatTensor(marginal)).cuda()
+
+            mi_lb, t, et = mutual_information(joint, marginal, mine_net)
+            ma_et = (1 - ma_rate) * ma_et + ma_rate * torch.mean(et)
+
+            # 通过引入移动平均(moving average, ma)，可以减小梯度的方差，使得梯度更新更加平滑，从而有助于训练的收敛和稳定性。
+            loss = -(torch.mean(t) - (1 / ma_et.mean()).detach() * torch.mean(et))
+            # use biased estimator
+            #     loss = - mi_lb
+
+            mine_net_optim.zero_grad()
+            loss.backward()
+            mine_net_optim.step()
+
+            result.append(mi_lb.detach().cpu().numpy())
+            # todo:logging and print
+
+    def test(self):
+        pass
+
+    def save(self):
+        if not os.path.exists('./saved_models'):
+            os.makedirs('./saved_models')
+
+        state_dict = self.model.state_dict()
+
+        current_time = self.now.strftime("%Y%m%d%H%M")
+        model_filename = f'{self.args.save_name}_{current_time}.pth'
+
+        torch.save({'model': state_dict},
+                   './saved_models/{}'.format(model_filename))
+        print('Saved as {}'.format(model_filename))
+        return model_filename
+
+    def load(self, name):
+        state_dict = torch.load('./saved_models/{}'.format(name))
+        self.model.load_state_dict(state_dict['model'])
 
 
 def mutual_information(joint, marginal, mine_net):
@@ -146,5 +203,3 @@ def func1(rh, dim=20):
     rh = np.abs(rh)
     dim = dim - 1
     return -0.5 * np.log(dim * rh + 1) - 0.5 * np.log(1 - rh) * dim
-
-
