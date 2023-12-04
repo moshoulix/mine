@@ -61,16 +61,14 @@ class Trainer:
             marginal = torch.autograd.Variable(torch.FloatTensor(marginal)).cuda()
 
             mi_lb, t, et = mutual_information(joint, marginal, mine_net)
-            ma_et = (1 - ma_rate) * ma_et + ma_rate * torch.mean(et)
+            ma_et = (1 - self.args.ma_rate) * ma_et + self.args.ma_rate * torch.mean(et)
 
             # 通过引入移动平均(moving average, ma)，可以减小梯度的方差，使得梯度更新更加平滑，从而有助于训练的收敛和稳定性。
             loss = -(torch.mean(t) - (1 / ma_et.mean()).detach() * torch.mean(et))
-            # use biased estimator
-            #     loss = - mi_lb
 
-            mine_net_optim.zero_grad()
+            optimizer.zero_grad()
             loss.backward()
-            mine_net_optim.step()
+            optimizer.step()
 
             result.append(mi_lb.detach().cpu().numpy())
             # todo:logging and print
@@ -128,9 +126,11 @@ def learn_mine(batch, mine_net, mine_net_optim, ma_et, ma_rate=0.01):
 
 def sample_batch(data, batch_size=100, sample_mode='joint'):
     if sample_mode == 'joint':
+        # 随机取batch size个
         index = np.random.choice(range(data.shape[0]), size=batch_size, replace=False)
         batch = data[index]
     else:
+        # 一个维度选bs个然后拼在一起
         joint_index = np.random.choice(range(data.shape[0]), size=batch_size, replace=False)
         marginal_index = np.random.choice(range(data.shape[0]), size=batch_size, replace=False)
         batch = np.concatenate([data[joint_index][:, 0].reshape(-1, 1),
